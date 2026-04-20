@@ -96,6 +96,62 @@ INPUT_PATH = Path("cse_476_final_project_test_data.json")
 OUTPUT_PATH = Path("cse_476_final_project_answers.json")
 
 
+# =============================================================================
+# Technique 1 — Chain of Thought
+# ask the model to walk through the problem step by step before answering
+# =============================================================================
+
+def chain_of_thought(question: str, max_tokens: int = 700) -> str:
+    system = "You are a careful problem solver. Think step by step."
+    prompt = (
+        f"{question}\n\n"
+        "Work through this step by step. "
+        "Write your final answer on the last line starting with 'Answer:'"
+    )
+    resp = call_llm(prompt, system=system, temperature=0.0, max_tokens=max_tokens)
+    return extract_final_answer(resp)
+
+
+# =============================================================================
+# Technique 2 — Self-Consistency
+# run the same question a few times at higher temperature, take the majority answer
+# works really well for math where one run might go wrong but most won't
+# =============================================================================
+
+def self_consistency(question: str, n: int = 5) -> str:
+    from collections import Counter
+    system = "You are a careful problem solver. Give only the final answer, nothing else."
+    prompt = f"{question}\n\nFinal answer:"
+
+    answers = []
+    for _ in range(n):
+        resp = call_llm(prompt, system=system, temperature=0.7, max_tokens=256)
+        ans = resp.strip().split("\n")[0].strip()
+        if ans:
+            answers.append(ans)
+        time.sleep(0.1)
+
+    if not answers:
+        return ""
+    return Counter(answers).most_common(1)[0][0]
+
+
+# =============================================================================
+# Technique 3 — Self-Refine
+# give the model its own answer and ask it to spot and fix mistakes
+# =============================================================================
+
+def self_refine(question: str, initial_answer: str, max_tokens: int = 1024) -> str:
+    prompt = (
+        f"Question:\n{question}\n\n"
+        f"Proposed answer:\n{initial_answer}\n\n"
+        "Is there anything wrong or missing in this answer? "
+        "If yes, fix it. Output only the corrected final answer, nothing else."
+    )
+    improved = call_llm(prompt, temperature=0.0, max_tokens=max_tokens)
+    return improved.strip() if improved.strip() else initial_answer
+
+
 def load_questions(path: Path) -> List[Dict[str, Any]]:
     with path.open("r") as fp:
         data = json.load(fp)
