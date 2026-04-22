@@ -1,5 +1,5 @@
 import os
-
+import argparse
 
 API_KEY  = os.getenv("OPENAI_API_KEY", "sk-mh4JzIDKRc4vcvmFonXWpA")
 API_BASE = os.getenv("API_BASE", "https://openai.rc.asu.edu/v1")
@@ -10,10 +10,6 @@ parser = argparse.ArgumentParser(description="Generate answers for the final pro
 parser.add_argument("--local", action="store_true", help="Run on local model.")
 
 args = parser.parse_args()
-
-global API_KEY
-global API_BASE
-global MODEL
 
 if args.local:
     print("Using local model")

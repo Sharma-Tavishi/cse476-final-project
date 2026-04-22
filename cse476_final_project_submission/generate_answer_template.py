@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import signal
 import time
 from collections import Counter
 from pathlib import Path
@@ -37,6 +38,14 @@ DRY_RUN  = False
 
 
 llm_call_count = 0 
+
+
+class CodeExecutionTimeout(Exception):
+    pass
+
+
+def _exec_timeout_handler(signum, frame):
+    raise CodeExecutionTimeout()
 
 def call_llm(
     prompt: str,
@@ -264,13 +273,50 @@ def tool_augmented_math(question: str) -> Optional[str]:
         }
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
+            signal.signal(signal.SIGALRM, _exec_timeout_handler)
+            signal.alarm(8)
             exec(code, safe_env)
+            signal.alarm(0)
         result = buf.getvalue().strip()
         if result:
             return result.splitlines()[-1].strip()
+    except CodeExecutionTimeout:
+        return "Code Timedout"
     except Exception:
         pass
+    finally:
+        signal.alarm(0)
     return None
+
+# def tool_augmented_math(question: str) -> Optional[str]:
+#     code_prompt = (
+#         f"Solve this math problem by writing Python code:\n{question}\n\n"
+#         "Use only the standard library (math, itertools, fractions, etc.). "
+#         "Print the final answer on the last line. Output only the code."
+#     )
+#     code = call_llm(code_prompt, temperature=0.0, max_tokens=600)
+#     code = re.sub(r"```(?:python)?\n?", "", code).replace("```", "").strip()
+#     try:
+#         result_queue = multiprocessing.Queue(maxsize=1)
+#         proc = multiprocessing.Process(
+#             target=_run_generated_math_code,
+#             args=(code, result_queue),
+#             daemon=True,
+#         )
+#         proc.start()
+#         proc.join(timeout=8)
+#         if proc.is_alive():
+#             proc.terminate()
+#             proc.join(timeout=1)
+#             return None
+#         if result_queue.empty():
+#             return None
+#         result = result_queue.get()
+#         if result.get("ok") and result.get("output"):
+#             return str(result["output"]).splitlines()[-1].strip()
+#     except Exception:
+#         pass
+#     return None
 
 
 def tool_augmented_code(question: str) -> str:

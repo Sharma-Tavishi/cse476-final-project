@@ -12418,5 +12418,38 @@
   },
   {
     "output": "4608"
+  },
+  {
+    "output": "144"
+  },
+  {
+    "output": "We are given the set $ S = \\{1, 2, \\ldots, 2018\\} $, and we want to choose a subset $ A \\subseteq S $ such that for **any two distinct elements** $ a, b \\in A $, the sum $ a + b $ is **not divisible** by the difference $ |a - b| $."
+  },
+  {
+    "output": "We are to find the number of **2012-digit even numbers** using only the digits **0, 1, and 2**, such that:"
+  },
+  {
+    "output": "We are given:"
+  },
+  {
+    "output": "45"
+  },
+  {
+    "output": "We are given a set $ A = \\{1, 2, \\dots, 2019\\} $, and a function $ f: A \\to A $ such that:"
+  },
+  {
+    "output": "We are given a recurrence relation:"
+  },
+  {
+    "output": "1925"
+  },
+  {
+    "output": "1.3477746773580983"
+  },
+  {
+    "output": "We are given a circular arrangement $(a_1, a_2, \\ldots, a_{2022})$ of the integers $1, 2, \\ldots, 2022$ in clockwise order, and we are told that:"
+  },
+  {
+    "output": "We are given a hyperbola:"
   }
 ]
