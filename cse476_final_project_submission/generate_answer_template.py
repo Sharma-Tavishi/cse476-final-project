@@ -1,15 +1,6 @@
-#!/usr/bin/env python3
-"""
-Generate a placeholder answer file that matches the expected auto-grader format.
 
-Replace the placeholder logic inside `build_answers()` with your own agent loop
-before submitting so the ``output`` fields contain your real predictions.
-
-Reads the input questions from cse_476_final_project_test_data.json and writes
-an answers JSON file where each entry contains a string under the "output" key.
-"""
-
-from __future__ import annotations
+import argparse
+import contextlib
 
 import contextlib
 import io
@@ -22,18 +13,40 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-API_KEY  = os.getenv("OPENAI_API_KEY", "")
+# Global session for connection reuse
+session = requests.Session()
+# Configure retries for connection-level issues
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
+
+API_KEY  = os.getenv("OPENAI_API_KEY", "sk-mh4JzIDKRc4vcvmFonXWpA")
 API_BASE = os.getenv("API_BASE", "https://openai.rc.asu.edu/v1")
 MODEL    = os.getenv("MODEL_NAME", "qwen3-30b-a3b-instruct-2507")
 
+DRY_RUN  = False
+
+
+llm_call_count = 0 
 
 def call_llm(
     prompt: str,
     system: str = "You are a helpful assistant.",
     temperature: float = 0.0,
     max_tokens: int = 1024,
+    num_retries: int = 3,
 ) -> str:
+    global llm_call_count
+    llm_call_count += 1
     url = f"{API_BASE}/chat/completions"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -48,13 +61,28 @@ def call_llm(
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=90)
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"] or ""
-    except Exception:
-        pass
+    if DRY_RUN:
+        return "DEBUG: Dry run mode enabled. No actual LLM call made."
+
+    for attempt in range(num_retries):
+
+        try:
+            # Use separate connect and read timeouts
+            resp = session.post(url, headers=headers, json=payload, timeout=(10, 120))
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"] or ""
+            else:
+                print(f"\n  [Call {llm_call_count}] API Error {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            if attempt == num_retries - 1:
+                print(f"\n  [Call {llm_call_count}] Final attempt failed: {e}")
+            else:
+                time.sleep(2 ** attempt)  # Exponential backoff
+        
+    # Brief pause to avoid hammering the server
+    time.sleep(0.05)
     return ""
+
 
 
 def extract_final_answer(text: str) -> str:
@@ -95,8 +123,9 @@ def detect_domain(text: str) -> str:
     return "common_sense"
 
 
-INPUT_PATH = Path("cse_476_final_project_test_data.json")
-OUTPUT_PATH = Path("cse_476_final_project_answers.json")
+SCRIPT_DIR = Path(__file__).parent
+INPUT_PATH = SCRIPT_DIR / "cse_476_final_project_test_data.json"
+OUTPUT_PATH = SCRIPT_DIR / "cse_476_final_project_answers.json"
 
 
 # Technique 1 — Chain of Thought
@@ -351,18 +380,27 @@ def load_questions(path: Path) -> List[Dict[str, Any]]:
     return data
 
 
-def build_answers(questions: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    answers = []
-    for idx, question in enumerate(questions):
-        if idx % 50 == 0:
-            print(f"  progress: {idx}/{len(questions)}")
+def build_answers(questions: List[Dict[str, Any]], saved_answers: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    answers = saved_answers[:-1]
+    global llm_call_count
+    starting_idx = len(saved_answers) - 1 
+    questions_to_solve = questions[starting_idx:]
+    print("Starting Eval")
+    for idx, question in enumerate(questions_to_solve):
+        # if idx % 50 == 0:
+        total_done = starting_idx + idx
+        avg_call = llm_call_count / (total_done + 1)
+        print(f"  progress: {total_done}/{len(questions)} | llm calls: {llm_call_count} | avg calls: {avg_call:.3f}", end="\r")
         try:
             answer = agent(question["input"])
         except Exception as e:
             print(f"  question {idx} failed ({e}), skipping")
             answer = ""
         answers.append({"output": str(answer)[:5000]})
+        with OUTPUT_PATH.open("w") as fp:
+            json.dump(answers, fp, ensure_ascii=False, indent=2)
     return answers
+
 
 
 def validate_results(
@@ -385,21 +423,57 @@ def validate_results(
                 f"({len(answer['output'])} chars). Please make sure your answer does not include any intermediate results."
             )
 
-
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate answers for the final project.")
+    parser.add_argument("--dry-run", action="store_true", help="Run without making actual LLM calls.")
+    parser.add_argument("--local", action="store_true", help="Run on local model.")
+
+    args = parser.parse_args()
+
+    global DRY_RUN
+    DRY_RUN = args.dry_run
+    if DRY_RUN:
+        print("!!! DRY RUN MODE ENABLED !!!")
+
+    
+    global API_KEY
+    global API_BASE
+    global MODEL
+
+    if args.local:
+        print("Using local model")
+        API_KEY  = os.getenv("OPENAI_API_KEY", "lmstudio")
+        API_BASE = os.getenv("API_BASE", "http://localhost:1234/v1")
+        MODEL    = os.getenv("MODEL_NAME", "qwen/qwen3-30b-a3b-2507")
+
+
     questions = load_questions(INPUT_PATH)
-    answers = build_answers(questions)
 
-    with OUTPUT_PATH.open("w") as fp:
-        json.dump(answers, fp, ensure_ascii=False, indent=2)
+    del_json = input("Delete current answers? (y/n): ")
 
-    with OUTPUT_PATH.open("r") as fp:
-        saved_answers = json.load(fp)
-    validate_results(questions, saved_answers)
-    print(
-        f"Wrote {len(answers)} answers to {OUTPUT_PATH} "
-        "and validated format successfully."
-    )
+    if del_json == "y":
+        print("Deleting Json")
+        os.remove(OUTPUT_PATH)
+        starting_idx = 0
+        saved_answers =[]
+    else:
+        with OUTPUT_PATH.open("r") as fp:
+            saved_answers = json.load(fp)
+        starting_idx = len(saved_answers) - 1 
+        print("Already have", starting_idx, "answers. Continuing")
+
+    answers = build_answers(questions, saved_answers)
+    
+    if not DRY_RUN:
+        with OUTPUT_PATH.open("r") as fp:
+            saved_answers = json.load(fp)
+        validate_results(questions, saved_answers)
+        print(
+            f"Wrote {len(answers)} answers to {OUTPUT_PATH} "
+            "and validated format successfully."
+        )
+    else:
+        print(f"Dry run complete. Processed {len(answers)} questions (no data written).")
 
 
 if __name__ == "__main__":
