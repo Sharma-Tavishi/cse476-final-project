@@ -25,7 +25,7 @@ from openai import OpenAI
 
 # Initialize the client with the ASU API endpoint
 client = OpenAI(
-    base_url="https://openai.rc.asu.edu/v1",
+    base_url=API_BASE,
     api_key=f"{API_KEY}",
 )
 
