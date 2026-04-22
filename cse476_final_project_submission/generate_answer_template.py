@@ -431,7 +431,6 @@ def build_answers(questions: List[Dict[str, Any]], saved_answers: List[Dict[str,
     global llm_call_count
     starting_idx = len(saved_answers) - 1 
     questions_to_solve = questions[starting_idx:]
-    print("Starting Eval")
     for idx, question in enumerate(questions_to_solve):
         # if idx % 50 == 0:
         total_done = starting_idx + idx
@@ -452,6 +451,7 @@ def build_answers(questions: List[Dict[str, Any]], saved_answers: List[Dict[str,
 def validate_results(
     questions: List[Dict[str, Any]], answers: List[Dict[str, Any]]
 ) -> None:
+    print(f"Validating results")
     if len(questions) != len(answers):
         raise ValueError(
             f"Mismatched lengths: {len(questions)} questions vs {len(answers)} answers."
