@@ -138,9 +138,3 @@ python generate_answer_template.py --dry-run
 # Use local LM Studio instance
 python generate_answer_template.py --local
 ```
-
----
-
-## References
-
-T. Sharma, V. Sharma, and P. Sharma, "Real-Time Trust Verification for Safe Agentic Actions using TrustBench," *arXiv:2603.09157*, 2026.
